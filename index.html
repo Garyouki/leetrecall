@@ -27,8 +27,15 @@
         <button class="tab" data-filter="due">Due Today</button>
         <button class="tab" data-filter="mastered">Mastered</button>
       </div>
-      <input type="text" id="search" placeholder="🔍  Search problems..." />
+      <div class="control-actions">
+        <button id="export-data" class="data-button" type="button">Export backup</button>
+        <button id="import-data" class="data-button" type="button">Import backup</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+        <input type="text" id="search" placeholder="🔍  Search problems..." />
+      </div>
     </div>
+
+    <div id="data-message" class="data-message" role="status" aria-live="polite"></div>
 
     <!-- Table -->
     <div class="table-wrapper">

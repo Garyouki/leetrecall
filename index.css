@@ -72,6 +72,38 @@ h1 {
 
 .tabs { display: flex; gap: 6px; }
 
+.control-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.data-button {
+  padding: 7px 12px;
+  background: #242424;
+  border: 1px solid #444;
+  border-radius: 7px;
+  color: #bbb;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.data-button:hover { border-color: #ffa116; color: #ffa116; }
+
+.data-message {
+  min-height: 18px;
+  margin: -8px 0 8px;
+  color: #aaa;
+  font-size: 12px;
+  text-align: right;
+}
+
+.data-message.error { color: #ef4743; }
+
+.data-message.success { color: #00b8a3; }
+
 .tab {
   padding: 7px 18px;
   background: #242424;

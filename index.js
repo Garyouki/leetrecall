@@ -7,6 +7,26 @@ let allProblems  = [];
 let activeFilter = "all";
 let searchQuery  = "";
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function safeProblemUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "leetcode.com"
+      ? url.href
+      : "https://leetcode.com/problemset/";
+  } catch {
+    return "https://leetcode.com/problemset/";
+  }
+}
+
 // ── Proficiency level based on SM-2 repetition + easeFactor 
 function getProficiency(p) {
   const rep = p.repetition || 0;
@@ -114,7 +134,7 @@ function render() {
       <tr>
         <td>${idx + 1}</td>
         <td>
-          <a class="prob-link" href="${p.url}" target="_blank">${p.title}</a>
+          <a class="prob-link" href="${safeProblemUrl(p.url)}" target="_blank">${escapeHtml(p.title)}</a>
         </td>
         <td class="date-cell ${isDue ? "date-due" : ""}">${nextDate}</td>
         <td class="date-cell">${lastDate}</td>
@@ -165,6 +185,96 @@ function load() {
     render();
   });
 }
+
+function showDataMessage(message, type = "") {
+  const element = document.getElementById("data-message");
+  element.textContent = message;
+  element.className = `data-message ${type}`.trim();
+}
+
+function validateImportedProblems(value) {
+  const problems = Array.isArray(value) ? value : value?.problems;
+  if (!Array.isArray(problems)) throw new Error("Backup does not contain a problems array.");
+
+  const seenIds = new Set();
+  return problems.map((problem, index) => {
+    if (!problem || typeof problem !== "object") {
+      throw new Error(`Problem ${index + 1} is invalid.`);
+    }
+    if (typeof problem.id !== "string" || !problem.id.startsWith("/problems/")) {
+      throw new Error(`Problem ${index + 1} has an invalid id.`);
+    }
+    if (seenIds.has(problem.id)) throw new Error(`Duplicate problem id: ${problem.id}`);
+    seenIds.add(problem.id);
+    if (typeof problem.title !== "string" || !problem.title.trim()) {
+      throw new Error(`Problem ${index + 1} has no title.`);
+    }
+    if (!problem.nextReview || Number.isNaN(new Date(problem.nextReview).getTime())) {
+      throw new Error(`Problem ${index + 1} has an invalid nextReview date.`);
+    }
+    for (const field of ["interval", "repetition", "easeFactor"]) {
+      if (!Number.isFinite(problem[field])) {
+        throw new Error(`Problem ${index + 1} has an invalid ${field}.`);
+      }
+    }
+    if (problem.history != null && !Array.isArray(problem.history)) {
+      throw new Error(`Problem ${index + 1} has invalid history.`);
+    }
+    return problem;
+  });
+}
+
+document.getElementById("export-data").addEventListener("click", () => {
+  chrome.storage.local.get({ problems: [] }, ({ problems }) => {
+    const backup = {
+      format: "leetrecall-backup",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      problems: problems || []
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `leetrecall-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showDataMessage(`Exported ${backup.problems.length} problems.`, "success");
+  });
+});
+
+const importFile = document.getElementById("import-file");
+document.getElementById("import-data").addEventListener("click", () => importFile.click());
+
+importFile.addEventListener("change", async () => {
+  const file = importFile.files?.[0];
+  importFile.value = "";
+  if (!file) return;
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    const problems = validateImportedProblems(parsed);
+    const shouldImport = window.confirm(
+      `Import ${problems.length} problems? This will replace the data currently stored in this extension.`
+    );
+    if (!shouldImport) return;
+
+    chrome.storage.local.set({ problems }, () => {
+      if (chrome.runtime.lastError) {
+        showDataMessage(chrome.runtime.lastError.message, "error");
+        return;
+      }
+      showDataMessage(`Imported ${problems.length} problems.`, "success");
+      load();
+    });
+  } catch (error) {
+    showDataMessage(`Import failed: ${error.message}`, "error");
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes.problems) load();
+});
 
 // ── Tab clicks ────────────────────────────────────────────────
 document.querySelectorAll(".tab").forEach(tab => {

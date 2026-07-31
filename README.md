@@ -139,6 +139,12 @@ After each submission, LeetRecall gives it a quality score from 0 to 5.
 
 Higher score means a longer gap before the next review. Score of 0 means it shows up in Due Today immediately on same day.
 
+## Backup and migration
+
+The dashboard can export all local problem history to a JSON backup and import it later. Importing replaces the data currently stored by that extension.
+
+Chrome isolates local storage by extension ID. Normal upgrades to the same Chrome Web Store listing keep their data, but a fork published as a new listing receives a new ID. Export from the old extension before uninstalling it, then import that backup into the fork.
+
 
 
 ## Troubleshooting

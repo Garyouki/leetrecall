@@ -109,4 +109,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initial render
   render();
+
+  // Keep an open popup in sync with submissions saved by any LeetCode tab.
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && changes.problems) render();
+  });
 });

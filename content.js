@@ -1,13 +1,11 @@
-// ============================================================
-// content.js — LeetCode Page Tracker
-// ============================================================
-console.log("LeetRecall: content.js loaded");
+// LeetCode page tracker.
 
-let startTime      = Date.now();
-let attempts       = 0;
+console.log("LeetRecall: content script loaded");
+
+let startTime = Date.now();
+let attempts = 0;
 let viewedSolution = false;
-let observerActive = false;
-let submitHooked   = false;
+let activeSubmissionToken = null;
 
 const TERMINAL_STATES = [
   "accepted",
@@ -19,248 +17,222 @@ const TERMINAL_STATES = [
   "output limit exceeded"
 ];
 
-// ── Get problem metadata ─────────────────────────────────────
 function getProblemData() {
   const slugMatch = window.location.pathname.match(/\/problems\/([^/]+)/);
-  const slug      = slugMatch ? slugMatch[1] : null;
-  const cleanId   = slug ? `/problems/${slug}` : window.location.pathname;
-
+  const slug = slugMatch ? slugMatch[1] : null;
+  const cleanId = slug ? `/problems/${slug}` : window.location.pathname;
   const titleFromSlug = slug
-    ? slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    ? slug.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
     : "Unknown Problem";
 
   const titleEl =
-    document.querySelector('[data-cy="question-title"]')            ||
+    document.querySelector('[data-cy="question-title"]') ||
     document.querySelector('[class*="title__"][class*="question"]') ||
-    document.querySelector('.mr-2.text-label-1')                    ||
+    document.querySelector(".mr-2.text-label-1") ||
     document.querySelector('div[class*="question-title"]');
 
   let title = titleEl ? titleEl.innerText.trim().replace(/^\d+\.\s*/, "") : "";
   if (!title || title.length < 2) title = titleFromSlug;
 
   return {
-    id:    cleanId,
-    title: title,
-    url:   `https://leetcode.com${cleanId}/`
+    id: cleanId,
+    title,
+    url: `https://leetcode.com${cleanId}/`
   };
 }
 
-// ── Send performance data to scheduler ───────────────────────
-function sendToScheduler(performance) {
-  let retries = 0;
-  const check = setInterval(() => {
-    retries++;
-    if (window.leetRecallScheduler?.reviewProblem) {
-      try {
-        window.leetRecallScheduler.reviewProblem(getProblemData(), performance);
-      } catch (e) {
-        console.log("LeetRecall: scheduler error →", e.message);
-      }
-      clearInterval(check);
-    }
-    if (retries > 50) clearInterval(check);
-  }, 100);
+function getSubmissionId(url = window.location.href) {
+  const match = url.match(/\/submissions\/(?:detail\/)?(\d+)/);
+  return match ? match[1] : null;
 }
 
-// ── Find result element — works for Accepted AND Wrong Answer ─
+function getTerminalState(text) {
+  const normalized = (text || "").trim().toLowerCase();
+  return TERMINAL_STATES.find(state => normalized.includes(state)) || null;
+}
+
 function findResultElement() {
   const byLocator = document.querySelector('[data-e2e-locator="submission-result"]');
-  if (byLocator) {
-    const text = byLocator.innerText.trim().toLowerCase();
-    if (TERMINAL_STATES.some(s => text.includes(s))) return byLocator;
-  }
+  if (byLocator && getTerminalState(byLocator.innerText)) return byLocator;
 
-  const h3Match = Array.from(document.querySelectorAll("h3")).find(el => {
-    const text = el.innerText.trim().toLowerCase();
-    return TERMINAL_STATES.some(s => text.includes(s));
-  });
-  if (h3Match) return h3Match;
+  const heading = Array.from(document.querySelectorAll("h3")).find(element =>
+    getTerminalState(element.innerText)
+  );
+  if (heading) return heading;
 
-  const anyMatch = Array.from(document.querySelectorAll("span, div, p")).find(el => {
-    if (el.children.length > 0) return false;
-    const text = el.innerText.trim().toLowerCase();
-    return TERMINAL_STATES.some(s => text === s);
-  });
-
-  return anyMatch || null;
+  return Array.from(document.querySelectorAll("span, div, p")).find(element =>
+    element.children.length === 0 && getTerminalState(element.innerText)
+  ) || null;
 }
 
-// ── Watch DOM for submission result ──────────────────────────
-function watchForResultText(callback) {
-  let fired = false;
-
-  function checkResult() {
-    if (fired) return;
-    const el = findResultElement();
-    if (!el) return;
-    const text    = el.innerText.trim().toLowerCase();
-    const matched = TERMINAL_STATES.find(s => text.includes(s));
-    if (!matched) return;
-    fired = true;
-    observer.disconnect();
-    observerActive = false;
-    const solved = matched === "accepted";
-    console.log("LeetRecall: result →", solved ? "✅ Accepted" : "❌ " + matched);
-    callback(solved);
-  }
-
-  const observer = new MutationObserver(checkResult);
-  observer.observe(document.body, { childList: true, subtree: true });
-  checkResult();
-
-  setTimeout(() => {
-    if (!fired) {
-      observer.disconnect();
-      observerActive = false;
-      console.log("LeetRecall: timed out waiting for result");
-    }
-  }, 60000);
+function delay(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
-// ── Wait for /submissions/NUMBER/ URL then watch result ──────
-function waitForSubmissionResult(callback) {
-  if (observerActive) return;
-  observerActive = true;
-
-  console.log("LeetRecall: waiting for submission URL...");
-
-  const pollInterval = setInterval(() => {
-    const url = window.location.href;
-    if (/\/problems\/[^/]+\/submissions\/\d+/.test(url)) {
-      clearInterval(pollInterval);
-      console.log("LeetRecall: submission URL confirmed →", url);
-      setTimeout(() => watchForResultText(callback), 300);
-    }
-  }, 300);
-
-  setTimeout(() => {
-    clearInterval(pollInterval);
-    if (observerActive) {
-      observerActive = false;
-      console.log("LeetRecall: timed out waiting for URL");
-    }
-  }, 60000);
-}
-
-// ── Called after each submission result detected ─────────────
-function onSubmitResult(solved) {
+function sendSubmission(submissionId, solved) {
   attempts += 1;
-  const timeTaken = Math.max(1, Math.round((Date.now() - startTime) / 60000));
-
   const performance = {
     solved,
-    time:           timeTaken,
+    time: Math.max(1, Math.round((Date.now() - startTime) / 60000)),
     attempts,
     viewedSolution
   };
 
-  console.log("LeetRecall: recording →", performance);
-  sendToScheduler(performance);
-}
-
-// ── Hook Submit button ────────────────────────────────────────
-function initSubmitHook() {
-  if (submitHooked) return;
-
-  const allBtns   = Array.from(document.querySelectorAll("button"));
-  const submitBtn =
-    document.querySelector('[data-e2e-locator="console-submit-button"]') ||
-    allBtns.find(btn => btn.textContent.trim().toLowerCase() === "submit");
-
-  if (!submitBtn) { setTimeout(initSubmitHook, 1000); return; }
-  if (submitBtn.textContent.trim().toLowerCase().includes("run")) {
-    setTimeout(initSubmitHook, 1000); return;
-  }
-  if (submitBtn.dataset.leetRecallHooked === "true") {
-    submitHooked = true; return;
-  }
-
-  submitHooked = true;
-  submitBtn.dataset.leetRecallHooked = "true";
-
-  submitBtn.addEventListener("click", () => {
-    console.log("LeetRecall: submit clicked");
-    waitForSubmissionResult(onSubmitResult);
-  });
-
-  console.log("LeetRecall: submit button hooked");
-}
-
-// ── Detect solution/editorial viewing via URL change ─────────
-// This is the most reliable approach — instead of trying to hook
-// a click on the tab, we just watch the URL.
-// When URL changes to /solutions/ or /editorial — user viewed solution.
-// Also watch the DOM for editorial content appearing on the page.
-function initViewSolutionHook() {
-  let lastPath = window.location.pathname;
-
-  function checkIfViewingSolution(path) {
-    if (viewedSolution) return;
-
-    // ONLY trigger on URL — most reliable signal
-    if (path.includes("/solutions") || path.includes("/editorial")) {
-      viewedSolution = true;
-      console.log("LeetRecall: solution URL detected — marking as viewed");
+  chrome.runtime.sendMessage({
+    type: "RECORD_SUBMISSION",
+    payload: {
+      submissionId,
+      problemData: getProblemData(),
+      performance
     }
-  }
-
-  // Watch URL changes only
-  const observer = new MutationObserver(() => {
-    const currentPath = window.location.pathname;
-    if (currentPath !== lastPath) {
-      lastPath = currentPath;
-      checkIfViewingSolution(currentPath);
-    }
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  // Check on page load
-  checkIfViewingSolution(window.location.pathname);
-}
-
-// ── Reset tracking for new problem ───────────────────────────
-function resetTracking() {
-  startTime      = Date.now();
-  attempts       = 0;
-  viewedSolution = false;
-  observerActive = false;
-  submitHooked   = false;
-  console.log("LeetRecall: tracking reset for new problem");
-}
-
-// ── Watch for React SPA navigation ───────────────────────────
-function watchForNavigation() {
-  function getBasePath(path) {
-    return path
-      .replace(/\/submissions\/.*/, "")
-      .replace(/\/solutions.*/, "")
-      .replace(/\/editorial.*/, "")
-      .replace(/\/description.*/, "")
-      .replace(/\/$/, "");
-  }
-
-  let lastBase = getBasePath(window.location.pathname);
-
-  const navObserver = new MutationObserver(() => {
-    const currentBase = getBasePath(window.location.pathname);
-    if (currentBase === lastBase) return;
-    if (!currentBase.includes("/problems/")) {
-      lastBase = currentBase;
+  }, response => {
+    if (chrome.runtime.lastError) {
+      console.error("LeetRecall: background unavailable", chrome.runtime.lastError.message);
       return;
     }
-    console.log("LeetRecall: navigated to new problem →", currentBase);
-    lastBase = currentBase;
-    resetTracking();
-    setTimeout(() => {
-      initSubmitHook();
-    }, 1500);
+    if (!response?.ok) {
+      console.error("LeetRecall: submission was not saved", response?.error);
+      return;
+    }
+    console.log("LeetRecall: submission recorded", {
+      submissionId,
+      solved,
+      duplicate: response.duplicate,
+      nextReview: response.nextReview
+    });
   });
-
-  navObserver.observe(document.body, { childList: true, subtree: true });
 }
 
-// ── Init ──────────────────────────────────────────────────────
-initSubmitHook();
-initViewSolutionHook();
-watchForNavigation();
+async function readSubmissionStatus(submissionId) {
+  const response = await fetch(`/submissions/detail/${submissionId}/check/`, {
+    credentials: "include",
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Submission status returned ${response.status}`);
+
+  const data = await response.json();
+  const matched = getTerminalState(data.status_msg || data.status_code || "");
+  return matched;
+}
+
+async function waitForResult(submissionId, token, baselineResult) {
+  const deadline = Date.now() + 60000;
+
+  while (activeSubmissionToken === token && Date.now() < deadline) {
+    let matched = null;
+
+    try {
+      matched = await readSubmissionStatus(submissionId);
+    } catch (error) {
+      console.debug("LeetRecall: status endpoint unavailable; using DOM", error.message);
+    }
+
+    // The DOM fallback keeps tracking working if LeetCode changes or blocks
+    // its submission-status endpoint.
+    if (!matched) {
+      const resultElement = findResultElement();
+      const resultChanged = resultElement && (
+        resultElement !== baselineResult.element ||
+        getTerminalState(resultElement.innerText) !== baselineResult.state
+      );
+      if (resultChanged) matched = getTerminalState(resultElement.innerText);
+    }
+
+    if (matched) {
+      if (activeSubmissionToken !== token) return;
+      activeSubmissionToken = null;
+      sendSubmission(submissionId, matched === "accepted");
+      return;
+    }
+
+    await delay(500);
+  }
+
+  if (activeSubmissionToken === token) {
+    activeSubmissionToken = null;
+    console.warn("LeetRecall: timed out waiting for submission result", submissionId);
+  }
+}
+
+async function beginSubmissionWatch() {
+  const token = Symbol("submission");
+  activeSubmissionToken = token;
+
+  const previousSubmissionId = getSubmissionId();
+  const previousResultElement = findResultElement();
+  const baselineResult = {
+    element: previousResultElement,
+    state: previousResultElement ? getTerminalState(previousResultElement.innerText) : null
+  };
+  const deadline = Date.now() + 60000;
+
+  console.log("LeetRecall: waiting for a new submission", { previousSubmissionId });
+
+  while (activeSubmissionToken === token && Date.now() < deadline) {
+    const submissionId = getSubmissionId();
+    if (submissionId && submissionId !== previousSubmissionId) {
+      console.log("LeetRecall: new submission detected", submissionId);
+      await waitForResult(submissionId, token, baselineResult);
+      return;
+    }
+    await delay(200);
+  }
+
+  if (activeSubmissionToken === token) {
+    activeSubmissionToken = null;
+    console.warn("LeetRecall: timed out waiting for a new submission URL");
+  }
+}
+
+function isSubmitButton(element) {
+  const button = element?.closest?.("button");
+  if (!button) return false;
+  if (button.matches('[data-e2e-locator="console-submit-button"]')) return true;
+  return button.textContent.trim().toLowerCase() === "submit";
+}
+
+// Event delegation survives React replacing the Submit button after a result.
+document.addEventListener("click", event => {
+  if (!isSubmitButton(event.target)) return;
+  console.log("LeetRecall: submit clicked");
+  beginSubmissionWatch();
+}, true);
+
+function getBaseProblemPath(path) {
+  return path
+    .replace(/\/submissions\/.*/, "")
+    .replace(/\/solutions.*/, "")
+    .replace(/\/editorial.*/, "")
+    .replace(/\/description.*/, "")
+    .replace(/\/$/, "");
+}
+
+let lastPath = window.location.pathname;
+let lastBasePath = getBaseProblemPath(lastPath);
+
+function handleNavigation() {
+  const currentPath = window.location.pathname;
+  if (currentPath === lastPath) return;
+  lastPath = currentPath;
+
+  const currentBasePath = getBaseProblemPath(currentPath);
+  if (currentBasePath.includes("/problems/") && currentBasePath !== lastBasePath) {
+    lastBasePath = currentBasePath;
+    startTime = Date.now();
+    attempts = 0;
+    viewedSolution = false;
+    activeSubmissionToken = null;
+    console.log("LeetRecall: tracking reset for new problem");
+  }
+
+  if (currentPath.includes("/solutions") || currentPath.includes("/editorial")) {
+    viewedSolution = true;
+    console.log("LeetRecall: solution/editorial viewed");
+  }
+}
+
+const navigationObserver = new MutationObserver(handleNavigation);
+navigationObserver.observe(document.body, { childList: true, subtree: true });
+if (lastPath.includes("/solutions") || lastPath.includes("/editorial")) {
+  viewedSolution = true;
+}

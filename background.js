@@ -1,12 +1,93 @@
 // ============================================================
 // background.js — Service Worker (Manifest V3)
-// Does 3 things:
+// Does 4 things:
 //   1. Shows red badge count on icon (how many problems due)
 //   2. Updates badge every time you solve a problem
 //   3. Sends daily 9am reminder notification if problems are due
+//   4. Serializes and deduplicates submission writes from every tab
 // ============================================================
 
+importScripts("scheduler.js");
+
 console.log("LeetRecall: background service worker started");
+
+// chrome.storage.local has no atomic read-modify-write operation. Route every
+// submission through one background queue so writes from different tabs cannot
+// overwrite each other.
+let submissionWriteQueue = Promise.resolve();
+
+function getProblems() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get({ problems: [] }, result => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result.problems || []);
+    });
+  });
+}
+
+function setProblems(problems) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ problems }, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function recordSubmission(payload) {
+  if (!payload?.problemData?.id || !payload?.performance) {
+    throw new Error("Invalid submission payload");
+  }
+
+  const problems = await getProblems();
+  const result = LeetRecallScheduler.applyReview(
+    problems,
+    payload.problemData,
+    payload.performance,
+    payload.submissionId
+  );
+
+  if (result.duplicate) {
+    console.log("LeetRecall: duplicate submission ignored", payload.submissionId);
+    return { duplicate: true };
+  }
+
+  await setProblems(result.problems);
+  console.log("LeetRecall: submission saved", {
+    submissionId: payload.submissionId,
+    title: result.card.title,
+    solved: payload.performance.solved,
+    quality: result.quality,
+    nextReview: result.card.nextReview
+  });
+
+  return {
+    duplicate: false,
+    nextReview: result.card.nextReview,
+    quality: result.quality
+  };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "RECORD_SUBMISSION") return false;
+
+  const write = submissionWriteQueue.then(() => recordSubmission(message.payload));
+  submissionWriteQueue = write.catch(error => {
+    console.error("LeetRecall: failed to save submission", error);
+  });
+
+  write
+    .then(result => sendResponse({ ok: true, ...result }))
+    .catch(error => sendResponse({ ok: false, error: error.message }));
+
+  return true;
+});
 
 
 
