@@ -1,3 +1,4 @@
 .DS_Store
 dist/
 leetrecall-history-from-screenshot.json
+leetrecall-backup-*.json
