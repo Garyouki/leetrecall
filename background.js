@@ -40,6 +40,21 @@ function setProblems(problems) {
   });
 }
 
+async function migrateStoredSchedules() {
+  const problems = await getProblems();
+  const migration = LeetRecallScheduler.migrateSuccessfulSameDayCards(problems);
+  if (!migration.changed) return;
+
+  await setProblems(migration.problems);
+  console.log("LeetRecall: migrated successful same-day reviews to one-day intervals");
+}
+
+// Run migrations through the same queue as submissions so an update cannot
+// overwrite a submission arriving at the same time.
+submissionWriteQueue = migrateStoredSchedules().catch(error => {
+  console.error("LeetRecall: failed to migrate stored schedules", error);
+});
+
 async function recordSubmission(payload) {
   if (!payload?.problemData?.id || !payload?.performance) {
     throw new Error("Invalid submission payload");

@@ -16,20 +16,41 @@
     return 1;
   }
 
+  // A successful solve should always leave some space for forgetting, even
+  // when it took several attempts. Attempts affect fluency, but do not erase
+  // the fact that the problem was eventually solved without viewing a solution.
+  function getStartingInterval(quality) {
+    if (quality <= 2) return 1;
+    if (quality === 3) return 2;
+    if (quality === 4) return 3;
+    return 5;
+  }
+
   function sm2(card, quality, now) {
     card.easeFactor = Math.max(
       1.3,
       card.easeFactor + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
     );
 
-    if (quality < 3) {
+    if (quality === 0) {
       card.repetition = 0;
       card.interval = 0;
+    } else if (quality < 3) {
+      // A difficult but ultimately successful solve starts a short relearning
+      // step instead of remaining due forever on the same day.
+      card.repetition = 1;
+      card.interval = 1;
     } else {
       card.repetition += 1;
-      if (card.repetition === 1) card.interval = 1;
-      else if (card.repetition === 2) card.interval = 6;
-      else card.interval = Math.round(card.interval * card.easeFactor);
+      const startingInterval = getStartingInterval(quality);
+      if (card.repetition === 1) {
+        card.interval = startingInterval;
+      } else {
+        card.interval = Math.max(
+          startingInterval,
+          Math.round(Math.max(1, card.interval) * card.easeFactor)
+        );
+      }
     }
 
     const next = new Date(now);
@@ -38,6 +59,36 @@
     card.nextReview = next.toISOString();
 
     return card;
+  }
+
+  function migrateSuccessfulSameDayCards(problems) {
+    let changed = false;
+    const nextProblems = (Array.isArray(problems) ? problems : []).map(card => {
+      const history = Array.isArray(card.history) ? card.history : [];
+      const latest = history[history.length - 1];
+      const wasDifficultIndependentSolve =
+        card.interval === 0 &&
+        latest?.solved === true &&
+        latest.viewedSolution === false &&
+        (latest.quality === 1 || latest.quality === 2);
+
+      if (!wasDifficultIndependentSolve) return card;
+
+      const next = new Date(latest.date || card.nextReview);
+      if (Number.isNaN(next.getTime())) return card;
+
+      next.setDate(next.getDate() + 1);
+      next.setHours(0, 0, 0, 0);
+      changed = true;
+      return {
+        ...card,
+        interval: 1,
+        repetition: 1,
+        nextReview: next.toISOString()
+      };
+    });
+
+    return { problems: nextProblems, changed };
   }
 
   /**
@@ -110,7 +161,13 @@
     return { problems: nextProblems, card, quality, duplicate: false };
   }
 
-  global.LeetRecallScheduler = { computeQuality, sm2, applyReview };
+  global.LeetRecallScheduler = {
+    computeQuality,
+    getStartingInterval,
+    sm2,
+    migrateSuccessfulSameDayCards,
+    applyReview
+  };
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = global.LeetRecallScheduler;

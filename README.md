@@ -88,9 +88,9 @@ The reasoning is simple: if you needed to look at the answer, you don't really k
 
 1) If you got a wrong answer or viewed the solution, it shows up in "Due Today" Tab immediately on same day. You can come back later that evening and it will already be waiting for you.
 
-2) If you solved correctly, it appears in "Due Today" from tomorrow onward for scheduled review.
+2) If you solved correctly, the next review depends on how independently and fluently you solved it. A difficult solve returns tomorrow; a clean solve is spaced out further.
 
-So the rule is simple: wrong today means due today. Correct today means due tomorrow.
+So the rule is simple: wrong today means due today. Any independent Accepted submission gets at least one night of spacing.
 
 ![Due Today Tab](assets/Wrong_Solved_Due_Today.png)
 
@@ -135,9 +135,20 @@ After each submission, LeetRecall gives it a quality score from 0 to 5.
 | 4 | Solved in under 30 min, first attempt |
 | 3 | Solved with 1 to 2 attempts |
 | 2 | Solved with 3 to 4 attempts |
+| 1 | Solved with more than 4 attempts |
 | 0 | Wrong answer, viewed solution, or gave up |
 
-Higher score means a longer gap before the next review. Score of 0 means it shows up in Due Today immediately on same day.
+The first review gap reflects both independence and fluency:
+
+| Score | First review gap |
+|---|---|
+| 5 | 5 days |
+| 4 | 3 days |
+| 3 | 2 days |
+| 1-2 | 1 day |
+| 0 | Same day |
+
+Only score 0 resets the problem to Due Today. A score of 1 or 2 still means the problem was solved independently, so it starts a short one-day relearning step. Later successful reviews grow from the previous interval using the problem's SM-2 ease factor.
 
 ## Backup and migration
 
