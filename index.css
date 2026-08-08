@@ -92,6 +92,17 @@ h1 {
 
 .data-button:hover { border-color: #ffa116; color: #ffa116; }
 
+.data-button:disabled {
+  border-color: #333;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.redo-button:not(:disabled) {
+  border-color: #ffa116;
+  color: #ffa116;
+}
+
 .data-message {
   min-height: 18px;
   margin: -8px 0 8px;
@@ -176,6 +187,7 @@ tbody tr {
 
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: #242424; }
+tbody tr:has(.row-checkbox:checked) { background: #2b261d; }
 
 td {
   padding: 13px 16px;
@@ -183,8 +195,17 @@ td {
   vertical-align: middle;
 }
 
-/* S.No */
-td:first-child { color: #555; font-size: 12px; }
+/* Selection and S.No */
+.select-column { width: 42px; text-align: center; padding-right: 4px; }
+.select-column + th { width: 58px; }
+td.select-column + td { color: #555; font-size: 12px; }
+
+.problem-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: #ffa116;
+  cursor: pointer;
+}
 
 /* Problem name link */
 .prob-link {

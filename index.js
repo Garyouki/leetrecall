@@ -6,6 +6,7 @@
 let allProblems  = [];
 let activeFilter = "all";
 let searchQuery  = "";
+const selectedProblemIds = new Set();
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -69,6 +70,18 @@ function formatDate(iso) {
   });
 }
 
+function updateSelectionControls(visibleIds = []) {
+  const redoButton = document.getElementById("redo-tomorrow");
+  redoButton.disabled = selectedProblemIds.size === 0;
+  redoButton.textContent = `Redo tomorrow (${selectedProblemIds.size})`;
+
+  const selectVisible = document.getElementById("select-visible");
+  const selectedVisible = visibleIds.filter(id => selectedProblemIds.has(id)).length;
+  selectVisible.disabled = visibleIds.length === 0;
+  selectVisible.checked = visibleIds.length > 0 && selectedVisible === visibleIds.length;
+  selectVisible.indeterminate = selectedVisible > 0 && selectedVisible < visibleIds.length;
+}
+
 // ── Render table ─────────────────────────────────────────────
 function render() {
   const today   = new Date();
@@ -101,9 +114,10 @@ function render() {
   const tbody = document.getElementById("problem-table");
 
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-row">
       ${searchQuery ? "No problems match your search." : "No problems here yet!"}
     </td></tr>`;
+    updateSelectionControls([]);
     return;
   }
 
@@ -132,6 +146,12 @@ function render() {
 
     return `
       <tr>
+        <td class="select-column">
+          <input class="problem-checkbox row-checkbox" type="checkbox"
+            data-problem-id="${escapeHtml(p.id)}"
+            aria-label="Select ${escapeHtml(p.title)}"
+            ${selectedProblemIds.has(p.id) ? "checked" : ""}>
+        </td>
         <td>${idx + 1}</td>
         <td>
           <a class="prob-link" href="${safeProblemUrl(p.url)}" target="_blank">${escapeHtml(p.title)}</a>
@@ -145,6 +165,8 @@ function render() {
       </tr>
     `;
   }).join("");
+
+  updateSelectionControls(list.map(problem => problem.id));
 }
 
 // ── Update stats bar ──────────────────────────────────────────
@@ -181,6 +203,10 @@ function updateStats() {
 function load() {
   chrome.storage.local.get({ problems: [] }, ({ problems }) => {
     allProblems = problems || [];
+    const currentIds = new Set(allProblems.map(problem => problem.id));
+    for (const id of selectedProblemIds) {
+      if (!currentIds.has(id)) selectedProblemIds.delete(id);
+    }
     updateStats();
     render();
   });
@@ -290,6 +316,48 @@ document.querySelectorAll(".tab").forEach(tab => {
 document.getElementById("search").addEventListener("input", e => {
   searchQuery = e.target.value;
   render();
+});
+
+document.getElementById("problem-table").addEventListener("change", event => {
+  const checkbox = event.target.closest(".row-checkbox");
+  if (!checkbox) return;
+
+  if (checkbox.checked) selectedProblemIds.add(checkbox.dataset.problemId);
+  else selectedProblemIds.delete(checkbox.dataset.problemId);
+  render();
+});
+
+document.getElementById("select-visible").addEventListener("change", event => {
+  document.querySelectorAll(".row-checkbox").forEach(checkbox => {
+    if (event.target.checked) selectedProblemIds.add(checkbox.dataset.problemId);
+    else selectedProblemIds.delete(checkbox.dataset.problemId);
+  });
+  render();
+});
+
+document.getElementById("redo-tomorrow").addEventListener("click", () => {
+  const problemIds = [...selectedProblemIds];
+  if (!problemIds.length) return;
+
+  const button = document.getElementById("redo-tomorrow");
+  button.disabled = true;
+  button.textContent = "Scheduling...";
+
+  chrome.runtime.sendMessage({ type: "SCHEDULE_TOMORROW", problemIds }, response => {
+    if (chrome.runtime.lastError || !response?.ok) {
+      showDataMessage(
+        `Could not schedule: ${chrome.runtime.lastError?.message || response?.error || "Unknown error"}`,
+        "error"
+      );
+      render();
+      return;
+    }
+
+    selectedProblemIds.clear();
+    const label = response.updatedCount === 1 ? "problem" : "problems";
+    showDataMessage(`${response.updatedCount} ${label} scheduled for tomorrow.`, "success");
+    load();
+  });
 });
 
 // ── Init ──────────────────────────────────────────────────────

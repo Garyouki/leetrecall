@@ -89,10 +89,29 @@ async function recordSubmission(payload) {
   };
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== "RECORD_SUBMISSION") return false;
+async function scheduleTomorrow(problemIds) {
+  if (!Array.isArray(problemIds) || !problemIds.length) {
+    throw new Error("Select at least one problem");
+  }
 
-  const write = submissionWriteQueue.then(() => recordSubmission(message.payload));
+  const problems = await getProblems();
+  const result = LeetRecallScheduler.scheduleForTomorrow(problems, problemIds);
+  if (!result.updatedCount) throw new Error("The selected problems were not found");
+
+  await setProblems(result.problems);
+  return { updatedCount: result.updatedCount, nextReview: result.nextReview };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "RECORD_SUBMISSION" && message?.type !== "SCHEDULE_TOMORROW") {
+    return false;
+  }
+
+  const write = submissionWriteQueue.then(() =>
+    message.type === "RECORD_SUBMISSION"
+      ? recordSubmission(message.payload)
+      : scheduleTomorrow(message.problemIds)
+  );
   submissionWriteQueue = write.catch(error => {
     console.error("LeetRecall: failed to save submission", error);
   });

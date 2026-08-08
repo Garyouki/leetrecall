@@ -28,6 +28,10 @@
         <button class="tab" data-filter="mastered">Mastered</button>
       </div>
       <div class="control-actions">
+        <button id="redo-tomorrow" class="data-button redo-button" type="button"
+          title="Move the selected problems to tomorrow's review queue" disabled>
+          Redo tomorrow (0)
+        </button>
         <button id="export-data" class="data-button" type="button">Export backup</button>
         <button id="import-data" class="data-button" type="button">Import backup</button>
         <input id="import-file" type="file" accept="application/json,.json" hidden>
@@ -42,6 +46,9 @@
       <table>
         <thead>
           <tr>
+            <th class="select-column">
+              <input id="select-visible" class="problem-checkbox" type="checkbox" aria-label="Select all visible problems">
+            </th>
             <th>S.No</th>
             <th>Problem Name</th>
             <th>Next Scheduled</th>
@@ -54,7 +61,7 @@
         </thead>
         <tbody id="problem-table">
           <tr>
-            <td colspan="8" class="empty-row">No problems tracked yet. Solve a LeetCode problem to get started!</td>
+            <td colspan="9" class="empty-row">No problems tracked yet. Solve a LeetCode problem to get started!</td>
           </tr>
         </tbody>
       </table>

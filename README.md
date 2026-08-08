@@ -68,6 +68,8 @@ Your review queue prioritizes problems where proficiency is low. As you improve 
 
 The full dashboard shows every problem you've tracked — next review date, acceptance rate, average solve time, proficiency badge, and status.
 
+To revisit specific problems tomorrow, select them in the dashboard and click **Redo tomorrow**. Their next review is moved to tomorrow without adding a submission or changing their proficiency, and they will appear in **Due Today** when tomorrow arrives.
+
 ![Dashboard on LeetCode](assets/LeetCode_Problem_Extension.png)
 
 2) When you clear all your due problems for the day, the popup shows a clean slate — nothing pending, you're all caught up.

@@ -91,6 +91,25 @@
     return { problems: nextProblems, changed };
   }
 
+  function scheduleForTomorrow(problems, problemIds, nowValue) {
+    const selectedIds = new Set(Array.isArray(problemIds) ? problemIds : []);
+    if (!selectedIds.size) return { problems, updatedCount: 0, nextReview: null };
+
+    const tomorrow = nowValue ? new Date(nowValue) : new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const nextReview = tomorrow.toISOString();
+    let updatedCount = 0;
+
+    const nextProblems = (Array.isArray(problems) ? problems : []).map(card => {
+      if (!selectedIds.has(card.id)) return card;
+      updatedCount += 1;
+      return { ...card, nextReview };
+    });
+
+    return { problems: nextProblems, updatedCount, nextReview };
+  }
+
   /**
    * Applies one submission to the current problems array.
    * Existing cards keep the same schema; new history fields are additive so
@@ -166,6 +185,7 @@
     getStartingInterval,
     sm2,
     migrateSuccessfulSameDayCards,
+    scheduleForTomorrow,
     applyReview
   };
 
