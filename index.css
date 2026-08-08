@@ -195,10 +195,8 @@ td {
   vertical-align: middle;
 }
 
-/* Selection and S.No */
+/* Selection */
 .select-column { width: 42px; text-align: center; padding-right: 4px; }
-.select-column + th { width: 58px; }
-td.select-column + td { color: #555; font-size: 12px; }
 
 .problem-checkbox {
   width: 15px;

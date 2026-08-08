@@ -114,14 +114,14 @@ function render() {
   const tbody = document.getElementById("problem-table");
 
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-row">
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">
       ${searchQuery ? "No problems match your search." : "No problems here yet!"}
     </td></tr>`;
     updateSelectionControls([]);
     return;
   }
 
-  tbody.innerHTML = list.map((p, idx) => {
+  tbody.innerHTML = list.map(p => {
     const isDue       = new Date(p.nextReview) <= today;
     const nextDate    = formatDate(p.nextReview);
     const lastDate    = p.lastPerformance ? formatDate(p.history?.[p.history.length - 1]?.date || p.nextReview) : "—";
@@ -152,7 +152,6 @@ function render() {
             aria-label="Select ${escapeHtml(p.title)}"
             ${selectedProblemIds.has(p.id) ? "checked" : ""}>
         </td>
-        <td>${idx + 1}</td>
         <td>
           <a class="prob-link" href="${safeProblemUrl(p.url)}" target="_blank">${escapeHtml(p.title)}</a>
         </td>
