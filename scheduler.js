@@ -181,9 +181,6 @@
   }
 
   global.LeetRecallScheduler = {
-    computeQuality,
-    getStartingInterval,
-    sm2,
     migrateSuccessfulSameDayCards,
     scheduleForTomorrow,
     applyReview

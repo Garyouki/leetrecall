@@ -7,14 +7,13 @@ let attempts = 0;
 let viewedSolution = false;
 let activeSubmissionToken = null;
 
-const AUTO_RESET_PARAM = "leetrecall_reset";
 const RESET_LABEL = "reset to default code definition";
 
 function consumeAutoResetRequest() {
   const url = new URL(window.location.href);
-  if (url.searchParams.get(AUTO_RESET_PARAM) !== "1") return false;
+  if (url.searchParams.get(LeetRecallUrls.RESET_QUERY_PARAM) !== "1") return false;
 
-  url.searchParams.delete(AUTO_RESET_PARAM);
+  url.searchParams.delete(LeetRecallUrls.RESET_QUERY_PARAM);
   window.history.replaceState(window.history.state, "", url.href);
   return true;
 }

@@ -17,26 +17,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function safeProblemUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "leetcode.com"
-      ? url.href
-      : "https://leetcode.com/problemset/";
-  } catch {
-    return "https://leetcode.com/problemset/";
-  }
-}
-
-function getReviewUrl(value) {
-  const safeUrl = safeProblemUrl(value);
-  const url = new URL(safeUrl);
-  if (url.pathname.startsWith("/problems/")) {
-    url.searchParams.set("leetrecall_reset", "1");
-  }
-  return url.href;
-}
-
 // ── Proficiency level based on SM-2 repetition + easeFactor 
 function getProficiency(p) {
   const rep = p.repetition || 0;
@@ -162,7 +142,7 @@ function render() {
             ${selectedProblemIds.has(p.id) ? "checked" : ""}>
         </td>
         <td>
-          <a class="prob-link" href="${getReviewUrl(p.url)}" target="_blank">${escapeHtml(p.title)}</a>
+          <a class="prob-link" href="${LeetRecallUrls.getReviewUrl(p.url)}" target="_blank">${escapeHtml(p.title)}</a>
         </td>
         <td class="date-cell ${isDue ? "date-due" : ""}">${nextDate}</td>
         <td class="date-cell">${lastDate}</td>
