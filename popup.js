@@ -7,6 +7,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const tabs     = document.querySelectorAll(".tab"); //both tab buttons (Due Today & All Problems)
   let   activeTab = "due"; //tracks which tab is currently selected, starts as "due"
 
+  function getReviewUrl(value) {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || url.hostname !== "leetcode.com" ||
+          !url.pathname.startsWith("/problems/")) {
+        return "https://leetcode.com/problemset/";
+      }
+      url.searchParams.set("leetrecall_reset", "1");
+      return url.href;
+    } catch {
+      return "https://leetcode.com/problemset/";
+    }
+  }
+
   //Tab switching 
   tabs.forEach(tab => {
     tab.addEventListener("click", () => { //When tab gets clicked then
@@ -81,7 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
         card.className = `card ${isDue ? "card-due" : ""}`;
         card.innerHTML = `
           <div class="card-header">
-            <a class="card-title" href="${p.url}" target="_blank">
+            <a class="card-title" href="${getReviewUrl(p.url)}" target="_blank">
               ${p.title}
             </a>
             ${isDue ? '<span class="tag-due">DUE</span>' : ""}

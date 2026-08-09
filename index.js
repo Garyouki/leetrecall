@@ -28,6 +28,15 @@ function safeProblemUrl(value) {
   }
 }
 
+function getReviewUrl(value) {
+  const safeUrl = safeProblemUrl(value);
+  const url = new URL(safeUrl);
+  if (url.pathname.startsWith("/problems/")) {
+    url.searchParams.set("leetrecall_reset", "1");
+  }
+  return url.href;
+}
+
 // ── Proficiency level based on SM-2 repetition + easeFactor 
 function getProficiency(p) {
   const rep = p.repetition || 0;
@@ -153,7 +162,7 @@ function render() {
             ${selectedProblemIds.has(p.id) ? "checked" : ""}>
         </td>
         <td>
-          <a class="prob-link" href="${safeProblemUrl(p.url)}" target="_blank">${escapeHtml(p.title)}</a>
+          <a class="prob-link" href="${getReviewUrl(p.url)}" target="_blank">${escapeHtml(p.title)}</a>
         </td>
         <td class="date-cell ${isDue ? "date-due" : ""}">${nextDate}</td>
         <td class="date-cell">${lastDate}</td>

@@ -7,6 +7,83 @@ let attempts = 0;
 let viewedSolution = false;
 let activeSubmissionToken = null;
 
+const AUTO_RESET_PARAM = "leetrecall_reset";
+const RESET_LABEL = "reset to default code definition";
+
+function consumeAutoResetRequest() {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get(AUTO_RESET_PARAM) !== "1") return false;
+
+  url.searchParams.delete(AUTO_RESET_PARAM);
+  window.history.replaceState(window.history.state, "", url.href);
+  return true;
+}
+
+function elementLabel(element) {
+  return [
+    element.getAttribute("aria-label"),
+    element.getAttribute("title"),
+    element.getAttribute("data-tooltip"),
+    element.getAttribute("data-tooltip-content"),
+    element.getAttribute("data-tip"),
+    element.textContent
+  ].filter(Boolean).join(" ").trim().toLowerCase();
+}
+
+function findResetButton() {
+  // This is the icon used by LeetCode's current reset action. Unlike its
+  // tooltip, data-icon is present before any real mouse hover occurs.
+  const resetIcon = document.querySelector('[data-icon="arrow-rotate-left"]');
+  const iconButton = resetIcon?.closest("button");
+  if (iconButton) return iconButton;
+
+  const labelledButton = Array.from(document.querySelectorAll("button")).find(button =>
+    elementLabel(button).includes(RESET_LABEL)
+  );
+  return labelledButton || null;
+}
+
+async function confirmResetIfNeeded() {
+  const deadline = Date.now() + 5000;
+
+  while (Date.now() < deadline) {
+    const dialog = document.querySelector('[role="dialog"]');
+    const scope = dialog || document;
+    const confirmButton = Array.from(scope.querySelectorAll("button")).find(button => {
+      const label = elementLabel(button);
+      return label === "confirm" || (dialog && (
+        label === "reset" || label.includes("reset code")
+      ));
+    });
+    if (confirmButton) {
+      confirmButton.click();
+      return true;
+    }
+    await delay(100);
+  }
+
+  return false;
+}
+
+async function resetEditorToDefault() {
+  const deadline = Date.now() + 30000;
+
+  while (Date.now() < deadline) {
+    const directButton = findResetButton();
+    if (directButton) {
+      directButton.click();
+      if (await confirmResetIfNeeded()) {
+        console.log("LeetRecall: editor reset to the default code definition");
+        return;
+      }
+    }
+
+    await delay(500);
+  }
+
+  console.warn("LeetRecall: could not find LeetCode's reset-code button");
+}
+
 const TERMINAL_STATES = [
   "accepted",
   "wrong answer",
@@ -235,4 +312,8 @@ const navigationObserver = new MutationObserver(handleNavigation);
 navigationObserver.observe(document.body, { childList: true, subtree: true });
 if (lastPath.includes("/solutions") || lastPath.includes("/editorial")) {
   viewedSolution = true;
+}
+
+if (consumeAutoResetRequest()) {
+  resetEditorToDefault();
 }
