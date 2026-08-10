@@ -2,6 +2,7 @@
 
 globalThis.LeetRecallUrls = (() => {
   const RESET_QUERY_PARAM = "leetrecall_reset";
+  const RESET_HASH = "#leetrecall-reset";
   const PROBLEMSET_URL = "https://leetcode.com/problemset/";
 
   function getReviewUrl(value) {
@@ -13,11 +14,12 @@ globalThis.LeetRecallUrls = (() => {
       }
 
       url.searchParams.set(RESET_QUERY_PARAM, "1");
+      url.hash = RESET_HASH;
       return url.href;
     } catch {
       return PROBLEMSET_URL;
     }
   }
 
-  return Object.freeze({ RESET_QUERY_PARAM, getReviewUrl });
+  return Object.freeze({ RESET_QUERY_PARAM, RESET_HASH, getReviewUrl });
 })();

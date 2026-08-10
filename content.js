@@ -8,14 +8,45 @@ let viewedSolution = false;
 let activeSubmissionToken = null;
 
 const RESET_LABEL = "reset to default code definition";
+const AUTO_RESET_STORAGE_KEY = "leetrecall:auto-reset";
+const AUTO_RESET_TIMEOUT_MS = 2 * 60 * 1000;
+let autoResetInProgress = false;
 
-function consumeAutoResetRequest() {
+function getCurrentProblemPath() {
+  return window.location.pathname
+    .replace(/\/(submissions|solutions|editorial|description)(\/.*)?$/, "")
+    .replace(/\/$/, "");
+}
+
+function getAutoResetRequest() {
   const url = new URL(window.location.href);
-  if (url.searchParams.get(LeetRecallUrls.RESET_QUERY_PARAM) !== "1") return false;
+  const requested = url.searchParams.get(LeetRecallUrls.RESET_QUERY_PARAM) === "1" ||
+    url.hash === LeetRecallUrls.RESET_HASH;
+  const problemPath = getCurrentProblemPath();
 
-  url.searchParams.delete(LeetRecallUrls.RESET_QUERY_PARAM);
-  window.history.replaceState(window.history.state, "", url.href);
-  return true;
+  if (requested) {
+    sessionStorage.setItem(AUTO_RESET_STORAGE_KEY, JSON.stringify({
+      problemPath,
+      expiresAt: Date.now() + AUTO_RESET_TIMEOUT_MS
+    }));
+    url.searchParams.delete(LeetRecallUrls.RESET_QUERY_PARAM);
+    url.hash = "";
+    window.history.replaceState(window.history.state, "", url.href);
+    return true;
+  }
+
+  try {
+    const pending = JSON.parse(sessionStorage.getItem(AUTO_RESET_STORAGE_KEY) || "null");
+    if (pending?.problemPath === problemPath && pending.expiresAt > Date.now()) return true;
+  } catch {
+    sessionStorage.removeItem(AUTO_RESET_STORAGE_KEY);
+  }
+
+  return false;
+}
+
+function clearAutoResetRequest() {
+  sessionStorage.removeItem(AUTO_RESET_STORAGE_KEY);
 }
 
 function elementLabel(element) {
@@ -36,10 +67,27 @@ function findResetButton() {
   const iconButton = resetIcon?.closest("button");
   if (iconButton) return iconButton;
 
-  const labelledButton = Array.from(document.querySelectorAll("button")).find(button =>
+  const buttons = Array.from(document.querySelectorAll("button"));
+  const labelledButton = buttons.find(button =>
     elementLabel(button).includes(RESET_LABEL)
   );
-  return labelledButton || null;
+  if (labelledButton) return labelledButton;
+
+  const editor = document.querySelector(".monaco-editor");
+  if (!editor) return null;
+
+  const editorRect = editor.getBoundingClientRect();
+  const toolbarButtons = buttons.filter(button => {
+    const rect = button.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    return button.querySelector("svg") && rect.width > 0 && rect.height > 0 &&
+      centerX >= editorRect.left && centerX <= editorRect.right &&
+      centerY >= editorRect.top - 100 && centerY <= editorRect.top + 100;
+  });
+
+  // In LeetCode's editor toolbar, Reset is immediately before Full Screen.
+  return toolbarButtons.length >= 2 ? toolbarButtons.at(-2) : null;
 }
 
 async function confirmResetIfNeeded() {
@@ -72,6 +120,7 @@ async function resetEditorToDefault() {
     if (directButton) {
       directButton.click();
       if (await confirmResetIfNeeded()) {
+        clearAutoResetRequest();
         console.log("LeetRecall: editor reset to the default code definition");
         return;
       }
@@ -81,6 +130,14 @@ async function resetEditorToDefault() {
   }
 
   console.warn("LeetRecall: could not find LeetCode's reset-code button");
+}
+
+function startAutoResetIfRequested() {
+  if (!getAutoResetRequest() || autoResetInProgress) return;
+  autoResetInProgress = true;
+  resetEditorToDefault().finally(() => {
+    autoResetInProgress = false;
+  });
 }
 
 const TERMINAL_STATES = [
@@ -305,6 +362,8 @@ function handleNavigation() {
     viewedSolution = true;
     console.log("LeetRecall: solution/editorial viewed");
   }
+
+  startAutoResetIfRequested();
 }
 
 const navigationObserver = new MutationObserver(handleNavigation);
@@ -313,6 +372,4 @@ if (lastPath.includes("/solutions") || lastPath.includes("/editorial")) {
   viewedSolution = true;
 }
 
-if (consumeAutoResetRequest()) {
-  resetEditorToDefault();
-}
+startAutoResetIfRequested();
