@@ -28,14 +28,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const dueProblems = LeetRecallReviewQueue.getDueProblems(problems, today);
       const dailyQueue = LeetRecallReviewQueue.getDailyReviewQueue(
         problems,
         reviewSettings,
         today
       );
 
-      badge.textContent = `${dueProblems.length} due`;
+      badge.textContent = `${dailyQueue.length} due`;
       const list = activeTab === "due" ? dailyQueue : [...problems];
 
       if (list.length === 0) {

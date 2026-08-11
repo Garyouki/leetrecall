@@ -117,11 +117,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 function updateBadge() {
-  chrome.storage.local.get({ problems: [] }, ({ problems }) => {
+  chrome.storage.local.get({ problems: [], reviewSettings: {} }, ({ problems, reviewSettings }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dueCount = LeetRecallReviewQueue.getDueProblems(problems, today).length;
+    const dueCount = LeetRecallReviewQueue.getDailyReviewQueue(
+      problems,
+      reviewSettings,
+      today
+    ).length;
 
     if (dueCount > 0) {
       chrome.action.setBadgeText({ text: String(dueCount) });
@@ -135,7 +139,7 @@ function updateBadge() {
 updateBadge();
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.problems) {
+  if (area === "local" && (changes.problems || changes.reviewSettings)) {
     updateBadge();
   }
 });
@@ -170,11 +174,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
   console.log("LeetRecall: daily alarm fired — checking due problems");
 
-  chrome.storage.local.get({ problems: [] }, ({ problems }) => {
+  chrome.storage.local.get({ problems: [], reviewSettings: {} }, ({ problems, reviewSettings }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dueCount = LeetRecallReviewQueue.getDueProblems(problems, today).length;
+    const dueCount = LeetRecallReviewQueue.getDailyReviewQueue(
+      problems,
+      reviewSettings,
+      today
+    ).length;
 
     if (dueCount === 0) {
       console.log("LeetRecall: no problems due today — skipping notification");
