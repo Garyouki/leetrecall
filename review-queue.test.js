@@ -80,11 +80,32 @@ const tied = [
   card("later", { nextReview: "2026-08-10T16:00:00.000Z", history: [] }),
   card("earlier", { nextReview: "2026-08-10T08:00:00.000Z", history: [] })
 ];
-assert.equal(queue.getDailyReviewQueue(tied, { dailyLimit: 2 }, now)[0].id, "earlier");
-assert.deepEqual(
-  queue.getDuePool(sevenDue, now).slice(0, 6).map(problem => problem.id),
-  queue.getDailyReviewQueue(sevenDue, {}, now).map(problem => problem.id),
-  "daily queue is the first page of the due pool"
+assert.equal(queue.getDuePool(tied, now)[0].id, "earlier");
+assert.equal(
+  new Set(queue.getDailyReviewQueue(sevenDue, {}, now).map(problem => problem.id)).size,
+  6,
+  "daily queue samples due problems without duplicates"
+);
+assert.ok(
+  queue.getDailyReviewQueue(sevenDue, {}, now).every(problem =>
+    queue.getDuePool(sevenDue, now).some(dueProblem => dueProblem.id === problem.id)
+  ),
+  "daily queue only samples from the due pool"
+);
+
+const weighted = [
+  card("low", { repetition: 6, easeFactor: 2.5, nextReview: daysFromNow(0) }),
+  card("high", {
+    repetition: 0,
+    easeFactor: 1.3,
+    nextReview: daysFromNow(-7),
+    history: [{ date: daysFromNow(0), quality: 0, solved: false, viewedSolution: true }]
+  })
+];
+assert.equal(
+  queue.getWeightedReviewQueue(weighted, 1, now, () => 0.99)[0].id,
+  "high",
+  "higher priority reviews receive larger weighted-random ranges"
 );
 
 const reviewed = scheduler.applyReview(

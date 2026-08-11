@@ -6,6 +6,7 @@
   const MIN_DAILY_REVIEW_LIMIT = 1;
   const MAX_DAILY_REVIEW_LIMIT = 20;
   const DAY_MS = 24 * 60 * 60 * 1000;
+  const BASE_RANDOM_WEIGHT = 0.05;
 
   function startOfDay(value) {
     const date = value instanceof Date ? new Date(value) : new Date(value);
@@ -128,12 +129,37 @@
 
   function getDailyReviewQueue(problems, reviewSettings, nowValue) {
     const limit = getDailyReviewLimit(reviewSettings);
-    return getDuePool(problems, nowValue).slice(0, limit);
+    return getWeightedReviewQueue(getDuePool(problems, nowValue), limit, nowValue);
   }
 
   function getDuePool(problems, nowValue) {
     return getDueProblems(problems, nowValue)
       .sort((first, second) => compareByPriority(first, second, nowValue));
+  }
+
+  function getWeightedReviewQueue(cards, limit, nowValue, random = Math.random) {
+    const remaining = Array.isArray(cards) ? [...cards] : [];
+    const queue = [];
+    const queueLimit = Math.min(Math.max(0, limit), remaining.length);
+
+    while (queue.length < queueLimit) {
+      const weights = remaining.map(card => BASE_RANDOM_WEIGHT + Math.max(0, getPriority(card, nowValue)));
+      const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+      let draw = random() * totalWeight;
+      let selectedIndex = weights.length - 1;
+
+      for (let index = 0; index < weights.length; index += 1) {
+        draw -= weights[index];
+        if (draw <= 0) {
+          selectedIndex = index;
+          break;
+        }
+      }
+
+      queue.push(remaining.splice(selectedIndex, 1)[0]);
+    }
+
+    return queue;
   }
 
   global.LeetRecallReviewQueue = Object.freeze({
@@ -146,6 +172,7 @@
     isDue,
     getDueProblems,
     getDuePool,
+    getWeightedReviewQueue,
     getDailyReviewQueue
   });
 
