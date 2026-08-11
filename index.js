@@ -4,6 +4,7 @@
 // ============================================================
 
 let allProblems  = [];
+let reviewSettings = {};
 let activeFilter = "all";
 let searchQuery  = "";
 const selectedProblemIds = new Set();
@@ -19,14 +20,15 @@ function escapeHtml(value) {
 
 // ── Proficiency level based on SM-2 repetition + easeFactor 
 function getProficiency(p) {
-  const rep = p.repetition || 0;
-  const ef  = p.easeFactor || 2.5;
-  if (rep === 0)                  return { label: "Novice",     cls: "badge-novice" };
-  if (rep <= 3 || ef < 1.8)      return { label: "Learning",   cls: "badge-learning" };
-  if (rep <= 5 && ef < 2.3)      return { label: "Familiar",   cls: "badge-familiar" };
-  if (rep <= 5 && ef >= 2.3)     return { label: "Proficient", cls: "badge-proficient" };
-  if (rep >= 6 && ef >= 2.3)     return { label: "Mastered",   cls: "badge-mastered" };
-  return                                 { label: "Familiar",   cls: "badge-familiar" };
+  const label = LeetRecallReviewQueue.getProficiencyLabel(p);
+  const classes = {
+    Novice: "badge-novice",
+    Learning: "badge-learning",
+    Familiar: "badge-familiar",
+    Proficient: "badge-proficient",
+    Mastered: "badge-mastered"
+  };
+  return { label, cls: classes[label] };
 }
 // ── Acceptance rate from history ─────────────────────────────
 function getAcceptanceRate(p) {
@@ -79,7 +81,9 @@ function render() {
   // Filter
   let list = [...allProblems];
   if (activeFilter === "due") {
-    list = list.filter(p => new Date(p.nextReview) <= today);
+    list = LeetRecallReviewQueue.getDailyReviewQueue(allProblems, reviewSettings, today);
+  } else if (activeFilter === "due-pool") {
+    list = LeetRecallReviewQueue.getDuePool(allProblems, today);
   } else if (activeFilter === "mastered") {
     list = list.filter(p => getProficiency(p).label === "Mastered");
   }
@@ -91,27 +95,33 @@ function render() {
     );
   }
 
-  // Sort: due first, then by nextReview
-  list.sort((a, b) => {
-    const aDue = new Date(a.nextReview) <= today;
-    const bDue = new Date(b.nextReview) <= today;
-    if (aDue && !bDue) return -1;
-    if (!aDue && bDue) return 1;
-    return new Date(a.nextReview) - new Date(b.nextReview);
-  });
+  if (activeFilter !== "due" && activeFilter !== "due-pool") {
+    // Sort: due first, then by nextReview.
+    list.sort((a, b) => {
+      const aDue = LeetRecallReviewQueue.isDue(a, today);
+      const bDue = LeetRecallReviewQueue.isDue(b, today);
+      if (aDue && !bDue) return -1;
+      if (!aDue && bDue) return 1;
+      return new Date(a.nextReview) - new Date(b.nextReview);
+    });
+  }
 
   const tbody = document.getElementById("problem-table");
 
   if (!list.length) {
+    const emptyMessage = activeFilter === "due-pool" && !searchQuery
+      ? "No due problems in the pool."
+      : searchQuery ? "No problems match your search." : "No problems here yet!";
+
     tbody.innerHTML = `<tr><td colspan="8" class="empty-row">
-      ${searchQuery ? "No problems match your search." : "No problems here yet!"}
+      ${emptyMessage}
     </td></tr>`;
     updateSelectionControls([]);
     return;
   }
 
   tbody.innerHTML = list.map(p => {
-    const isDue       = new Date(p.nextReview) <= today;
+    const isDue       = LeetRecallReviewQueue.isDue(p, today);
     const nextDate    = formatDate(p.nextReview);
     const lastDate    = p.lastPerformance ? formatDate(p.history?.[p.history.length - 1]?.date || p.nextReview) : "—";
     const proficiency = getProficiency(p);
@@ -162,7 +172,7 @@ function updateStats() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const due      = allProblems.filter(p => new Date(p.nextReview) <= today).length;
+  const due      = LeetRecallReviewQueue.getDailyReviewQueue(allProblems, reviewSettings, today).length;
   const mastered = allProblems.filter(p => getProficiency(p).label === "Mastered").length;
 
   document.getElementById("total").textContent    = allProblems.length;
@@ -189,8 +199,11 @@ function updateStats() {
 
 // ── Load from storage ─────────────────────────────────────────
 function load() {
-  chrome.storage.local.get({ problems: [] }, ({ problems }) => {
+  chrome.storage.local.get({ problems: [], reviewSettings: {} }, ({ problems, reviewSettings: storedSettings }) => {
     allProblems = problems || [];
+    reviewSettings = storedSettings || {};
+    document.getElementById("daily-review-limit").value =
+      LeetRecallReviewQueue.getDailyReviewLimit(reviewSettings);
     const currentIds = new Set(allProblems.map(problem => problem.id));
     for (const id of selectedProblemIds) {
       if (!currentIds.has(id)) selectedProblemIds.delete(id);
@@ -287,7 +300,13 @@ importFile.addEventListener("change", async () => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && changes.problems) load();
+  if (areaName === "local" && (changes.problems || changes.reviewSettings)) load();
+});
+
+document.getElementById("daily-review-limit").addEventListener("change", event => {
+  const dailyLimit = LeetRecallReviewQueue.getDailyReviewLimit({ dailyLimit: event.target.value });
+  event.target.value = dailyLimit;
+  chrome.storage.local.set({ reviewSettings: { ...reviewSettings, dailyLimit } });
 });
 
 // ── Tab clicks ────────────────────────────────────────────────

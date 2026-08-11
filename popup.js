@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function render() {
-    chrome.storage.local.get({ problems: [] }, ({ problems }) => {
+    chrome.storage.local.get({ problems: [], reviewSettings: {} }, ({ problems, reviewSettings }) => {
       if (!problems || problems.length === 0) {
         content.innerHTML = `
           <div class="empty">
@@ -28,12 +28,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const dueProblems = problems.filter(
-        p => new Date(p.nextReview) <= today
+      const dueProblems = LeetRecallReviewQueue.getDueProblems(problems, today);
+      const dailyQueue = LeetRecallReviewQueue.getDailyReviewQueue(
+        problems,
+        reviewSettings,
+        today
       );
 
       badge.textContent = `${dueProblems.length} due`;
-      const list = activeTab === "due" ? dueProblems : [...problems];
+      const list = activeTab === "due" ? dailyQueue : [...problems];
 
       if (list.length === 0) {
         content.innerHTML = `
@@ -44,11 +47,13 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      list.sort((a, b) => new Date(a.nextReview) - new Date(b.nextReview));
+      if (activeTab === "all") {
+        list.sort((a, b) => new Date(a.nextReview) - new Date(b.nextReview));
+      }
 
       content.innerHTML = "";
       list.forEach(p => {
-        const isDue      = new Date(p.nextReview) <= today;
+        const isDue      = LeetRecallReviewQueue.isDue(p, today);
         const reviewDate = new Date(p.nextReview).toLocaleDateString(
           undefined, { month: "short", day: "numeric" }
         );
@@ -92,6 +97,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Keep an open popup in sync with submissions saved by any LeetCode tab.
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "local" && changes.problems) render();
+    if (areaName === "local" && (changes.problems || changes.reviewSettings)) render();
   });
 });

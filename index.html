@@ -25,9 +25,14 @@
       <div class="tabs">
         <button class="tab active" data-filter="all">All</button>
         <button class="tab" data-filter="due">Due Today</button>
+        <button class="tab" data-filter="due-pool">Due Pool</button>
         <button class="tab" data-filter="mastered">Mastered</button>
       </div>
       <div class="control-actions">
+        <label class="daily-limit-control" for="daily-review-limit">
+          Daily review
+          <input id="daily-review-limit" type="number" min="1" max="20" step="1" inputmode="numeric">
+        </label>
         <button id="redo-tomorrow" class="data-button redo-button" type="button"
           title="Move the selected problems to tomorrow's review queue" disabled>
           Redo tomorrow (0)
@@ -69,6 +74,7 @@
   </div>
 
   <script src="review-url.js"></script>
+  <script src="review-queue.js"></script>
   <script src="index.js"></script>
 </body>
 </html>

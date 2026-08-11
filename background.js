@@ -1,6 +1,6 @@
 // LeetRecall service worker.
 
-importScripts("scheduler.js");
+importScripts("scheduler.js", "review-queue.js");
 
 console.log("LeetRecall: background service worker started");
 
@@ -121,7 +121,7 @@ function updateBadge() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dueCount = problems.filter(p => new Date(p.nextReview) <= today).length;
+    const dueCount = LeetRecallReviewQueue.getDueProblems(problems, today).length;
 
     if (dueCount > 0) {
       chrome.action.setBadgeText({ text: String(dueCount) });
@@ -174,7 +174,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dueCount = problems.filter(p => new Date(p.nextReview) <= today).length;
+    const dueCount = LeetRecallReviewQueue.getDueProblems(problems, today).length;
 
     if (dueCount === 0) {
       console.log("LeetRecall: no problems due today — skipping notification");
