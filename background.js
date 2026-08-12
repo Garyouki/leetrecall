@@ -21,6 +21,18 @@ function getProblems() {
   });
 }
 
+function getReviewState() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get({ problems: [], reviewSettings: {} }, result => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve({ problems: result.problems || [], reviewSettings: result.reviewSettings || {} });
+    });
+  });
+}
+
 function setProblems(problems) {
   return new Promise((resolve, reject) => {
     chrome.storage.local.set({ problems }, () => {
@@ -31,6 +43,29 @@ function setProblems(problems) {
       resolve();
     });
   });
+}
+
+function setReviewState(problems, reviewSettings) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ problems, reviewSettings }, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function ensureDailyQueueSnapshot(problems, reviewSettings, now = new Date()) {
+  const existing = reviewSettings.dailyQueue;
+  const today = LeetRecallReviewQueue.createDailyQueueSnapshot([], {}, now).day;
+  if (existing?.day === today && Array.isArray(existing.ids)) return reviewSettings;
+
+  return {
+    ...reviewSettings,
+    dailyQueue: LeetRecallReviewQueue.createDailyQueueSnapshot(problems, reviewSettings, now)
+  };
 }
 
 async function migrateStoredSchedules() {
@@ -53,7 +88,10 @@ async function recordSubmission(payload) {
     throw new Error("Invalid submission payload");
   }
 
-  const problems = await getProblems();
+  const { problems, reviewSettings } = await getReviewState();
+  // Snapshot before applying the submission. This prevents the submitted card
+  // from changing today's six-card selection.
+  const settingsWithQueue = ensureDailyQueueSnapshot(problems, reviewSettings);
   const result = LeetRecallScheduler.applyReview(
     problems,
     payload.problemData,
@@ -66,7 +104,7 @@ async function recordSubmission(payload) {
     return { duplicate: true };
   }
 
-  await setProblems(result.problems);
+  await setReviewState(result.problems, settingsWithQueue);
   console.log("LeetRecall: submission saved", {
     submissionId: payload.submissionId,
     title: result.card.title,
@@ -121,9 +159,14 @@ function updateBadge() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const settingsWithQueue = ensureDailyQueueSnapshot(problems, reviewSettings, today);
+    if (settingsWithQueue !== reviewSettings) {
+      chrome.storage.local.set({ reviewSettings: settingsWithQueue });
+    }
+
     const dueCount = LeetRecallReviewQueue.getDailyReviewQueue(
       problems,
-      reviewSettings,
+      settingsWithQueue,
       today
     ).length;
 
@@ -178,9 +221,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const settingsWithQueue = ensureDailyQueueSnapshot(problems, reviewSettings, today);
+    if (settingsWithQueue !== reviewSettings) {
+      chrome.storage.local.set({ reviewSettings: settingsWithQueue });
+    }
+
     const dueCount = LeetRecallReviewQueue.getDailyReviewQueue(
       problems,
-      reviewSettings,
+      settingsWithQueue,
       today
     ).length;
 

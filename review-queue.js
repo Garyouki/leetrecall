@@ -128,10 +128,44 @@
   }
 
   function getDailyReviewQueue(problems, reviewSettings, nowValue) {
+    const storedQueue = getStoredDailyReviewQueue(problems, reviewSettings, nowValue);
+    if (storedQueue) return storedQueue;
+
     const limit = getDailyReviewLimit(reviewSettings);
     const duePool = getDuePool(problems, nowValue);
     const seed = getDailyQueueSeed(duePool, limit, nowValue);
     return getWeightedReviewQueue(duePool, limit, nowValue, createSeededRandom(seed));
+  }
+
+  // A daily snapshot keeps the chosen set fixed while submissions change the
+  // due pool. Completed cards are omitted, but no replacement card is added.
+  function getStoredDailyReviewQueue(problems, reviewSettings, nowValue) {
+    const snapshot = reviewSettings?.dailyQueue;
+    if (!snapshot || snapshot.day !== getCalendarDayKey(nowValue) || !Array.isArray(snapshot.ids)) {
+      return null;
+    }
+
+    const cardsById = new Map((Array.isArray(problems) ? problems : []).map(card => [card.id, card]));
+    return snapshot.ids
+      .map(id => cardsById.get(id))
+      .filter(card => card && isDue(card, nowValue));
+  }
+
+  function createDailyQueueSnapshot(problems, reviewSettings, nowValue) {
+    const date = nowValue || new Date();
+    return {
+      day: getCalendarDayKey(date),
+      ids: getDailyReviewQueue(problems, { ...reviewSettings, dailyQueue: null }, date)
+        .map(card => card.id)
+    };
+  }
+
+  function getCalendarDayKey(value) {
+    const date = startOfDay(value || new Date());
+    if (!isValidDate(date)) return null;
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${month}-${day}`;
   }
 
   function getDuePool(problems, nowValue) {
@@ -204,6 +238,8 @@
     getDueProblems,
     getDuePool,
     getWeightedReviewQueue,
+    getStoredDailyReviewQueue,
+    createDailyQueueSnapshot,
     createSeededRandom,
     getDailyReviewQueue
   });

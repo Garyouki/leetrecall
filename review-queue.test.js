@@ -103,6 +103,16 @@ assert.notDeepEqual(
   "daily queue can be redrawn on a different day"
 );
 
+const snapshot = queue.createDailyQueueSnapshot(sevenDue, {}, now);
+const remainingAfterReview = sevenDue.map(problem =>
+  problem.id === snapshot.ids[0] ? { ...problem, nextReview: daysFromNow(1) } : problem
+);
+assert.deepEqual(
+  queue.getDailyReviewQueue(remainingAfterReview, { dailyQueue: snapshot }, now).map(problem => problem.id),
+  snapshot.ids.slice(1),
+  "a submission removes a card from today's snapshot without drawing a replacement"
+);
+
 const weighted = [
   card("low", { repetition: 6, easeFactor: 2.5, nextReview: daysFromNow(0) }),
   card("high", {
