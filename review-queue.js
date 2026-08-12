@@ -129,7 +129,9 @@
 
   function getDailyReviewQueue(problems, reviewSettings, nowValue) {
     const limit = getDailyReviewLimit(reviewSettings);
-    return getWeightedReviewQueue(getDuePool(problems, nowValue), limit, nowValue);
+    const duePool = getDuePool(problems, nowValue);
+    const seed = getDailyQueueSeed(duePool, limit, nowValue);
+    return getWeightedReviewQueue(duePool, limit, nowValue, createSeededRandom(seed));
   }
 
   function getDuePool(problems, nowValue) {
@@ -162,6 +164,35 @@
     return queue;
   }
 
+  function getDailyQueueSeed(cards, limit, nowValue) {
+    const day = calendarDayNumber(nowValue || new Date());
+    const ids = (Array.isArray(cards) ? cards : [])
+      .map(card => String(card?.id || ""))
+      .sort()
+      .join("|");
+    return `${day}:${limit}:${ids}`;
+  }
+
+  function hashString(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function createSeededRandom(seedValue) {
+    let state = hashString(String(seedValue));
+    return function seededRandom() {
+      state = Math.imul(state + 0x6d2b79f5, 1);
+      let value = state;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
   global.LeetRecallReviewQueue = Object.freeze({
     DEFAULT_DAILY_REVIEW_LIMIT,
     MIN_DAILY_REVIEW_LIMIT,
@@ -173,6 +204,7 @@
     getDueProblems,
     getDuePool,
     getWeightedReviewQueue,
+    createSeededRandom,
     getDailyReviewQueue
   });
 

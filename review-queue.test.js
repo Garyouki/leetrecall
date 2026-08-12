@@ -92,6 +92,16 @@ assert.ok(
   ),
   "daily queue only samples from the due pool"
 );
+assert.deepEqual(
+  queue.getDailyReviewQueue(sevenDue, {}, now).map(problem => problem.id),
+  queue.getDailyReviewQueue(sevenDue, {}, now).map(problem => problem.id),
+  "daily queue is stable across repeated renders on the same day"
+);
+assert.notDeepEqual(
+  queue.getDailyReviewQueue(sevenDue, {}, now).map(problem => problem.id),
+  queue.getDailyReviewQueue(sevenDue, {}, new Date(2026, 7, 11, 12)).map(problem => problem.id),
+  "daily queue can be redrawn on a different day"
+);
 
 const weighted = [
   card("low", { repetition: 6, easeFactor: 2.5, nextReview: daysFromNow(0) }),
