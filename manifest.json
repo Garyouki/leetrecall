@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LeetRecall",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Hands-free spaced repetition for LeetCode problems.",
   "icons": {
     "48": "icon48.png",
@@ -18,7 +18,7 @@
   "content_scripts": [
     {
       "matches": ["https://leetcode.com/problems/*"],
-      "js": ["review-url.js", "content.js"],
+      "js": ["review-url.js", "review-reset.js", "content.js"],
       "run_at": "document_idle"
     }
   ]

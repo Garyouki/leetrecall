@@ -7,138 +7,13 @@ let attempts = 0;
 let viewedSolution = false;
 let activeSubmissionToken = null;
 
-const RESET_LABEL = "reset to default code definition";
-const AUTO_RESET_STORAGE_KEY = "leetrecall:auto-reset";
-const AUTO_RESET_TIMEOUT_MS = 2 * 60 * 1000;
-let autoResetInProgress = false;
-
-function getCurrentProblemPath() {
-  return window.location.pathname
-    .replace(/\/(submissions|solutions|editorial|description)(\/.*)?$/, "")
-    .replace(/\/$/, "");
-}
-
-function getAutoResetRequest() {
-  const url = new URL(window.location.href);
-  const requested = url.searchParams.get(LeetRecallUrls.RESET_QUERY_PARAM) === "1" ||
-    url.hash === LeetRecallUrls.RESET_HASH;
-  const problemPath = getCurrentProblemPath();
-
-  if (requested) {
-    sessionStorage.setItem(AUTO_RESET_STORAGE_KEY, JSON.stringify({
-      problemPath,
-      expiresAt: Date.now() + AUTO_RESET_TIMEOUT_MS
-    }));
-    url.searchParams.delete(LeetRecallUrls.RESET_QUERY_PARAM);
-    url.hash = "";
-    window.history.replaceState(window.history.state, "", url.href);
-    return true;
-  }
-
-  try {
-    const pending = JSON.parse(sessionStorage.getItem(AUTO_RESET_STORAGE_KEY) || "null");
-    if (pending?.problemPath === problemPath && pending.expiresAt > Date.now()) return true;
-  } catch {
-    sessionStorage.removeItem(AUTO_RESET_STORAGE_KEY);
-  }
-
-  return false;
-}
-
-function clearAutoResetRequest() {
-  sessionStorage.removeItem(AUTO_RESET_STORAGE_KEY);
-}
-
-function elementLabel(element) {
-  return [
-    element.getAttribute("aria-label"),
-    element.getAttribute("title"),
-    element.getAttribute("data-tooltip"),
-    element.getAttribute("data-tooltip-content"),
-    element.getAttribute("data-tip"),
-    element.textContent
-  ].filter(Boolean).join(" ").trim().toLowerCase();
-}
-
-function findResetButton() {
-  // This is the icon used by LeetCode's current reset action. Unlike its
-  // tooltip, data-icon is present before any real mouse hover occurs.
-  const resetIcon = document.querySelector('[data-icon="arrow-rotate-left"]');
-  const iconButton = resetIcon?.closest("button");
-  if (iconButton) return iconButton;
-
-  const buttons = Array.from(document.querySelectorAll("button"));
-  const labelledButton = buttons.find(button =>
-    elementLabel(button).includes(RESET_LABEL)
-  );
-  if (labelledButton) return labelledButton;
-
-  const editor = document.querySelector(".monaco-editor");
-  if (!editor) return null;
-
-  const editorRect = editor.getBoundingClientRect();
-  const toolbarButtons = buttons.filter(button => {
-    const rect = button.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    return button.querySelector("svg") && rect.width > 0 && rect.height > 0 &&
-      centerX >= editorRect.left && centerX <= editorRect.right &&
-      centerY >= editorRect.top - 100 && centerY <= editorRect.top + 100;
-  });
-
-  // In LeetCode's editor toolbar, Reset is immediately before Full Screen.
-  return toolbarButtons.length >= 2 ? toolbarButtons.at(-2) : null;
-}
-
-async function confirmResetIfNeeded() {
-  const deadline = Date.now() + 5000;
-
-  while (Date.now() < deadline) {
-    const dialog = document.querySelector('[role="dialog"]');
-    const scope = dialog || document;
-    const confirmButton = Array.from(scope.querySelectorAll("button")).find(button => {
-      const label = elementLabel(button);
-      return label === "confirm" || (dialog && (
-        label === "reset" || label.includes("reset code")
-      ));
-    });
-    if (confirmButton) {
-      confirmButton.click();
-      return true;
-    }
-    await delay(100);
-  }
-
-  return false;
-}
-
-async function resetEditorToDefault() {
-  const deadline = Date.now() + 30000;
-
-  while (Date.now() < deadline) {
-    const directButton = findResetButton();
-    if (directButton) {
-      directButton.click();
-      if (await confirmResetIfNeeded()) {
-        clearAutoResetRequest();
-        console.log("LeetRecall: editor reset to the default code definition");
-        return;
-      }
-    }
-
-    await delay(500);
-  }
-
-  console.warn("LeetRecall: could not find LeetCode's reset-code button");
-}
-
-function startAutoResetIfRequested() {
-  if (!getAutoResetRequest() || autoResetInProgress) return;
-  autoResetInProgress = true;
-  resetEditorToDefault().finally(() => {
-    autoResetInProgress = false;
-  });
-}
+const autoResetController = LeetRecallReviewReset.createController({
+  windowObject: window,
+  documentObject: document,
+  storage: sessionStorage,
+  queryParam: LeetRecallUrls.RESET_QUERY_PARAM,
+  resetHash: LeetRecallUrls.RESET_HASH
+});
 
 const TERMINAL_STATES = [
   "accepted",
@@ -344,6 +219,9 @@ let lastPath = window.location.pathname;
 let lastBasePath = getBaseProblemPath(lastPath);
 
 function handleNavigation() {
+  // DOM changes on the same route are meaningful while Monaco is loading.
+  autoResetController.start();
+
   const currentPath = window.location.pathname;
   if (currentPath === lastPath) return;
   lastPath = currentPath;
@@ -362,8 +240,6 @@ function handleNavigation() {
     viewedSolution = true;
     console.log("LeetRecall: solution/editorial viewed");
   }
-
-  startAutoResetIfRequested();
 }
 
 const navigationObserver = new MutationObserver(handleNavigation);
@@ -372,4 +248,4 @@ if (lastPath.includes("/solutions") || lastPath.includes("/editorial")) {
   viewedSolution = true;
 }
 
-startAutoResetIfRequested();
+autoResetController.start();
